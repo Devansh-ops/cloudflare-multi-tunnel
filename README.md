@@ -1,9 +1,9 @@
 # Cloudflare Multi-Tunnel Setup Guide
 
-This guide explains how to establish two Cloudflare tunnels from a single Linux machine, each connected to a separate Cloudflare account. It is tailored for Linux, specifically tested on Ubuntu Server 24 LTS.
+This guide details how to set up two Cloudflare tunnels from a single Linux machine, each connecting to a different Cloudflare account. It's specifically designed for Linux and has been tested on Ubuntu Server 24 LTS.
 
 ## Prerequisites
-Before you begin, ensure Cloudflare is installed on your system by executing the following commands:
+Ensure Cloudflare is installed on your system by executing the following commands:
 
 ```bash
 sudo mkdir -p --mode=0755 /usr/share/keyrings
@@ -24,11 +24,13 @@ sudo apt-get update && sudo apt-get install cloudflared
 4. Repeat the login process for the second tunnel and rename the new `cert.pem` file as `cert2.pem`.
 
 ### Step 2: Create the Tunnels
-Use the following command to create each tunnel:
+Create each tunnel using the following command:
 ```bash
 cloudflared tunnel create tunnel-test
 ```
-**Note**: Record the tunnel UUID and path to the `.json` credentials file from the output for future use.
+**Note**: Keep a note of the tunnel UUID and the path to the `.json` credentials file for later use.
+
+**Note**: Just in case, you can use `sudo cloudflared --config /etc/cloudflared/config2.yml tunnel list` to get a list of tunnels and their UUID's (ID column)
 
 ### Step 3: Prepare Configuration Files
 Create a YAML configuration file for each tunnel. Here’s an example for the first tunnel (`config1.yml`):
@@ -51,38 +53,15 @@ warp-routing:
 Deploy the configuration files to the appropriate directory:
 ```bash
 sudo mkdir -p /etc/cloudflared
-cp ~/.cloudflared/config1.yml /etc/cloudflared/config1.yml
-cp ~/.cloudflared/config2.yml /etc/cloudflared/config2.yml
+sudo cp ~/.cloudflared/config1.yml /etc/cloudflared/config1.yml
+sudo cp ~/.cloudflared/config2.yml /etc/cloudflared/config2.yml
 ```
 
-### Step 5: Setup System Services
+### Step 5: Register and Start the Tunnel Services
+
 Create and register the basic Cloudflare update services in `/etc/systemd/system/`.
 
-**Cloudflare Update Service (`cloudflared-update.service`)**:
-```plaintext
-[Unit]
-Description=Update cloudflared
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-ExecStart=/bin/bash -c '/usr/bin/cloudflared update; code=$?; if [ $code -eq 11 ]; then systemctl restart cloudflared; exit 0; fi; exit $code'
-```
-
-**Cloudflare Update Timer (`cloudflared-update.timer`)**:
-```plaintext
-[Unit]
-Description=Update cloudflared
-
-[Timer]
-OnCalendar=daily
-
-[Install]
-WantedBy=timers.target
-```
-
-### Step 6: Register the Tunnel Services
-Setup each tunnel service, specifying the configuration file for each.
+Set up each tunnel service by specifying the configuration file for each.
 
 **Example Tunnel Service (`cloudflared-tunnel-1.service`)**:
 ```plaintext
@@ -102,15 +81,17 @@ RestartSec=5s
 WantedBy=multi-user.target
 ```
 
-### Step 7: Update DNS CNAME Records
+Start and enable the service to run at boot:
+```bash
+sudo systemctl start cloudflared-tunnel-1.service
+sudo systemctl enable cloudflared-tunnel-1.service
+```
+
+### Step 6: Update DNS CNAME Records
 Direct your DNS CNAME record to point to the new tunnel:
 ```bash
-sudo cloudflared --config /etc/cloudflared/config2.yml tunnel route dns 22114866-b3cd-4c85-ad64-49f46f0ab2c5 devansh.jkcart.com
+sudo cloudflared --config /etc/cloudflared/config2.yml tunnel route dns tunnel-1 devansh.jkcart.com
 ```
 
 ### Managing DNS Records
-Currently, deleting DNS records associated with Cloudflare tunnels must be done through the API or Dashboard due to limitations in the CLI tool. [Refer to this GitHub issue for more details
-
-.](https://github.com/cloudflare/cloudflared/issues/328)
-
-This comprehensive guide should assist you in setting up multiple Cloudflare tunnels on a single Linux machine, each configured and managed independently.
+Deleting DNS records associated with Cloudflare tunnels must currently be done through the API or Dashboard. [Refer to this GitHub issue for more details.](https://github.com/cloudflare/cloudflared/issues/328)
